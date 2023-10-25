@@ -1,0 +1,320 @@
+---
+title: "Assignment 3"
+subtitle: "Due at 11:59pm on October 24."
+format: html
+editor: visual
+---
+
+You may work in pairs or individually for this assignment. Make sure you join a group in Canvas if you are working in pairs. Turn in this assignment as an HTML or PDF file to ELMS. Make sure to include the R Markdown or Quarto file that was used to generate it. Include the GitHub link for the repository containing these files.
+
+```{r}
+library(xml2)
+library(rvest)
+library(tidyverse)
+library(stringr)
+library(tidytext)
+library(robotstxt)
+```
+
+## Web Scraping
+
+In this assignment, your task is to scrape some information from Wikipedia. We start with the following page about Grand Boulevard, a Chicago Community Area.
+
+<https://en.wikipedia.org/wiki/Grand_Boulevard,_Chicago>
+
+The ultimate goal is to gather the table "Historical population" and convert it to a `data.frame`.
+
+As a first step, read in the html page as an R object. Extract the tables from this object (using the `rvest` package) and save the result as a new object. Follow the instructions if there is an error. Use `str()` on this new object \-- it should be a list. Try to find the position of the "Historical population" in this list since we need it in the next step.
+
+We start by reading in the information from the first results page (search without filters).
+
+```{r}
+
+paths_allowed("https://en.wikipedia.org/wiki/Grand_Boulevard,_Chicago")
+
+url <- read_html("https://en.wikipedia.org/wiki/Grand_Boulevard,_Chicago")
+
+str(url)
+```
+
+Next, lets try to extract the "Historical population" from this page. To create the corresponding xpath, https://selectorgadget.com/ can be used by clicking on the desired element of the webpage. We then copy the resulting xpath into the call to `html_nodes()`.
+
+```{r}
+
+nds <- html_nodes(url, xpath = '//*[contains(concat( " ", @class, " " ), concat( " ", "us-census-pop-left", " " ))]//td | //*[contains(concat( " ", @class, " " ), concat( " ", "us-census-pop-left", " " ))]//th')
+```
+
+This object is still a list, so we have to extract further to convert it to the desired format.
+
+```{r}
+
+names <- html_text(nds)
+
+head(names)
+
+# We want to get rid off the long string that we don't need
+
+names <- names[-3]
+
+# I'll remove some other elements as well like "[3][4]"
+
+names <- names[-44]
+
+# I'll remove the blank space "" as well.
+
+names <- names[-c(6,10,14,18,22,26,30,34,38,42)]
+
+names
+
+# Looks good.
+```
+
+Extract the "Historical population" table from the list and save it as another object. You can use subsetting via `[[…]]` to extract pieces from a list. Print the result.
+
+```{r}
+
+# First I want to make the data frame that I'll extract from:
+
+names_dat <- matrix(names, ncol = 3, byrow = T)
+head(names_dat)
+
+# Now we create a `data.frame` and assign variable names.
+
+names_dat <- as.data.frame(names_dat)
+names(names_dat) <- c("Census", "Pop.", "%±")
+
+names_dat
+
+# I'll want to eliminate the first row now that I have variable names
+
+names_dat <- names_dat[-1,]
+
+names_dat
+
+#  Data frame looks correct and nice now.
+```
+
+You will see that the table needs some additional formatting. We only want rows and columns with actual values (I called the table object `pop`).
+
+```{r}
+
+# I already did this when I had the data in the list form. All of the rows and columns have the actual values.
+```
+
+## Expanding to More Pages
+
+That's it for this page. However, we may want to repeat this process for other community areas. The Wikipedia page https://en.wikipedia.org/wiki/Grand_Boulevard,\_Chicago has a section on "Places adjacent to Grand Boulevard, Chicago" at the bottom. Can you find the corresponding table in the list of tables that you created earlier? Extract this table as a new object.
+
+```{r}
+
+# The way I used scraping I did not receive a list of tables.
+```
+
+Then, grab the community areas east of Grand Boulevard and save them as a character vector. Print the result.
+
+```{r}
+
+url <- read_html("https://en.wikipedia.org/wiki/Grand_Boulevard,_Chicago")
+
+nds_2 <- html_nodes(url, xpath = '//td[(((count(preceding-sibling::*) + 1) = 3) and parent::*)]//a')
+
+new <- html_text(nds_2)
+
+new
+```
+
+We want to use this list to create a loop that extracts the population tables from the Wikipedia pages of these places. To make this work and build valid urls, we need to replace empty spaces in the character vector with underscores. This can be done with `gsub()`, or by hand. The resulting vector should look like this: "Oakland,\_Chicago" "Kenwood,\_Chicago" "Hyde_Park,\_Chicago"
+
+```{r}
+
+character_vector_2 <- gsub(" ","_", new)
+
+character_vector_2
+
+places_east <- character_vector_2
+
+# That's what we wanted.
+```
+
+To prepare the loop, we also want to copy our `pop` table and rename it as `pops`. In the loop, we append this table by adding columns from the other community areas.
+
+```{r}
+
+pops <- names_dat
+
+pops
+```
+
+Build a small loop to test whether you can build valid urls using the vector of places and pasting each element of it after `https://en.wikipedia.org/wiki/` in a for loop. Calling `url` shows the last url of this loop, which should be `https://en.wikipedia.org/wiki/Hyde_Park,_Chicago`.
+
+```{r}
+
+url <- list(NULL)
+
+base_url <- "https://en.wikipedia.org/wiki/"
+
+for(i in 1:length(places_east)) {
+   url <- paste0(base_url, places_east[i])
+   }
+
+url
+
+# Looks like what we want.
+```
+
+Finally, extend the loop and add the code that is needed to grab the population tables from each page. Add columns to the original table `pops` using `cbind()`.
+
+```{r}
+
+base_url <- "https://en.wikipedia.org/wiki/"
+
+for(i in 1:length(places_east)) {
+  url_1 <- paste0(base_url, places_east[i])
+  url <- read_html(url_1)
+  nds <- html_nodes(url, xpath = '//*[contains(concat( " ", @class, " " ), concat( " ", "us-census-pop-right", " " ))]//td | //*[contains(concat( " ", @class, " " ), concat( " ", "us-census-pop-right", " " ))]//th')
+  names <- html_text(nds)
+  names <- names[-3]
+  names <- names[-44]
+  names <- names[-c(6,10,14,18,22,26,30,34,38,42)]
+  names_dat_1 <- matrix(names, ncol = 3, byrow = T)
+  names_dat_1 <- as.data.frame(names_dat_1)
+  names(names_dat_1) <- c("Census", "Pop.", "%±")
+  names_dat_1 <- names_dat_1[-1,]
+  pops <- cbind(pops, names_dat_1)
+}
+
+pops
+
+# The loop works.
+```
+
+## Scraping and Analyzing Text Data
+
+Suppose we wanted to take the actual text from the Wikipedia pages instead of just the information in the table. Our goal in this section is to extract the text from the body of the pages, then do some basic text cleaning and analysis.
+
+First, scrape just the text without any of the information in the margins or headers. For example, for "Grand Boulevard", the text should start with, "**Grand Boulevard** on the [South Side](https://en.wikipedia.org/wiki/South_Side,_Chicago "South Side, Chicago") of [Chicago](https://en.wikipedia.org/wiki/Chicago "Chicago"), [Illinois](https://en.wikipedia.org/wiki/Illinois "Illinois"), is one of the ...". Make sure all of the text is in one block by using something like the code below (I called my object `description`).
+
+```{r}
+
+url <- read_html("https://en.wikipedia.org/wiki/Grand_Boulevard,_Chicago")
+
+nds_2 <- html_nodes(url, xpath = '//ul[(((count(preceding-sibling::*) + 1) = 23) and parent::*)]//li | //p')
+
+description <- html_text(nds_2)
+
+description <- description %>% paste(collapse = ' ')
+
+description
+
+# Looks like the desired text block.
+```
+
+Using a similar loop as in the last section, grab the descriptions of the various communities areas. Make a tibble with two columns: the name of the location and the text describing the location.
+
+```{r}
+
+base_url <- "https://en.wikipedia.org/wiki/"
+
+d_1 <- list(NULL)
+
+for(i in 1:length(places_east)) {
+  url_1 <- paste0(base_url, places_east[i])
+  url <- read_html(url_1)
+  nds <- html_nodes(url, xpath = '//ul[(((count(preceding-sibling::*) + 1) = 23) and parent::*)]//li | //p')
+  description_1 <- html_text(nds)
+  d_1[[i]] <- tibble(txt = description_1, location = places_east[i])
+}
+
+d_1
+
+# Loop looks good. Txt variable describes the location, location variable has the name of the location.
+```
+
+Let's clean the data using `tidytext`. If you have trouble with this section, see the example shown in <https://www.tidytextmining.com/tidytext.html>
+
+```{r}
+
+d <- tibble(txt = description)
+```
+
+Create tokens using `unnest_tokens`. Make sure the data is in one-token-per-row format. Remove any stop words within the data. What are the most common words used overall?
+
+```{r}
+
+# I'll start with Grand Boulevard:
+
+d_tokens<- d %>%
+  unnest_tokens(word, txt)
+
+# Removing stop words:
+
+data("stop_words")
+
+d_tokens <- anti_join(d_tokens, stop_words)
+
+sort(table(d_tokens))
+
+# Now for the other places:
+
+# Oakland first
+
+d_tokens_1<- d_1[[1]] %>%
+  unnest_tokens(word, txt)
+
+d_tokens_1 <- anti_join(d_tokens_1, stop_words)
+
+# Then Kenwood
+
+d_tokens_2<- d_1[[2]] %>%
+  unnest_tokens(word, txt)
+
+d_tokens_2 <- anti_join(d_tokens_2, stop_words)
+
+# Finally Hyde Park
+
+d_tokens_3<- d_1[[3]] %>%
+  unnest_tokens(word, txt)
+
+d_tokens_3 <- anti_join(d_tokens_3, stop_words)
+```
+
+Plot the most common words within each location. What are some of the similarities between the locations? What are some of the differences?
+
+```{r}
+
+table <- as.data.frame(table(d_tokens))
+
+barplot(table$Freq[table$Freq > 10], names.arg=table$word[table$Freq > 10], xlab = "words", ylab = "frequency", cex.names = .7)
+
+# We can see for Grand Boulevard 6 words with a frequency over 10, only 4 if we don't count Grand or Boulevard which isn't indicative of a topic seperate from the name of the area. The four words are avenue, marx, resided, and south.
+
+table_1 <- as.data.frame(table(d_tokens_1))
+
+barplot(table_1$Freq[table_1$Freq > 10], names.arg=table_1$word[table_1$Freq > 10], xlab = "words", ylab = "frequency", cex.names = .7)
+
+# There is no word with a frequency over 10 for Oakland if we don't count Oakland, which shows there isn't the same variety of words for the Oakland page that have a high frequency compared to the Grand Boulevard page.
+
+# I'm going to look at another plot with a lower frequency requirement of greater than 7 to get some more information for Oakland:
+
+barplot(table_1$Freq[table_1$Freq > 7], names.arg=table_1$word[table_1$Freq > 7], xlab = "words", ylab = "frequency", cex.names = .7)
+
+# We get four new words with this lowered frequency: chicago, homes, housing, and community. None of these words interesect with Grand Boulevard's over 10 frequncy.
+
+table_2 <- as.data.frame(table(d_tokens_2))
+
+barplot(table_2$Freq[table_2$Freq > 10], names.arg=table_2$word[table_2$Freq > 10], xlab = "words", ylab = "frequency", cex.names = .7)
+
+# Just like Oakland, the only word with a frequency over 10 is Kenwood. I'll try lowering the frequency to greater than 7 to compare it with, hopefully, more words.
+
+barplot(table_2$Freq[table_2$Freq > 7], names.arg=table_2$word[table_2$Freq > 7], xlab = "words", ylab = "frequency", cex.names = .7)
+
+# We only get one more word (as compared to 4 more with Oakland) and that word is school. Which once again has no overlap with the other two cities. It looks like in terms of high frequency words (>7) Kenwood has the least variety.
+
+table_3 <- as.data.frame(table(d_tokens_3))
+
+barplot(table_3$Freq[table_3$Freq > 10], names.arg=table_3$word[table_3$Freq > 10], xlab = "words", ylab = "frequency", cex.names = .41)
+
+# Hyde Park has the most variety in terms of words with a frequency greater than 10. The count (not including hyde or park) is 10: 55th, african, chicago, east, house, lake, located, south, street, and university. Finally there is some overlap with some of the other pages high frequency words. The word south matches the high frequency of south in the Grand Boulevard page (suggesting both cities might be considered in the southern area of Chicago perhaps?). Chicago having a high frequency matches with Oakland, and house having high frequency in Hyde Park again connects to the Oakland page which had a high frequency for the words home and housing. Finally university having a high frequency has a bit of a connection with Kenwood's only high frequency word (that's not Kenwood) which was school.
+
+# Most of the pages high frequency words don't have much overlap (apart from with Hyde Park) which is interesting because I wouldn't have guessed that.
+```
